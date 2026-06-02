@@ -133,6 +133,73 @@ def generate_report_tool(report_type: str, source_id: str, format: str = "markdo
     })
 
 
+@tool
+def scan_viral_opportunities_tool(query: str = "AI social media creator") -> str:
+    """Scan all 7 intelligence tiers for viral content opportunities.
+
+    Monitors: Reddit Tier 2 communities, Hacker News, Google Trends,
+    industry blogs (Meta, YouTube, TechCrunch). Identifies stories with
+    high viral potential 6-48 hours before they peak on Reddit.
+
+    Args:
+        query: Topic or keyword to focus the viral scan on
+    """
+    return json.dumps({
+        "action": "viral_scan",
+        "query": query,
+    })
+
+
+@tool
+def search_hacker_news_tool(query: str, limit: int = 10) -> str:
+    """Search Hacker News for tech stories, AI news, and startup launches.
+
+    Best for: AI stories, tech drama, security exploits, startup launches.
+    Most Reddit marketers ignore HN — stories here are 12-24h ahead of Reddit.
+
+    Args:
+        query: Search topic
+        limit: Number of stories to return
+    """
+    return json.dumps({
+        "action": "hacker_news_search",
+        "query": query,
+        "limit": limit,
+    })
+
+
+@tool
+def search_industry_blogs_tool(query: str = "") -> str:
+    """Fetch latest posts from platform blogs: Meta, YouTube, TechCrunch, The Verge.
+
+    These announce features before most users know about them.
+    Great for: algorithm updates, product launches, policy changes.
+
+    Args:
+        query: Filter by topic (leave empty for all latest)
+    """
+    return json.dumps({
+        "action": "industry_blogs_search",
+        "query": query,
+    })
+
+
+@tool
+def search_google_trends_tool(query: str) -> str:
+    """Get rising Google Trends searches for a topic.
+
+    Good for: emerging keywords, rising searches, seasonal topics.
+    Use to validate if a story has search demand before creating content.
+
+    Args:
+        query: Topic to check trends for
+    """
+    return json.dumps({
+        "action": "google_trends_search",
+        "query": query,
+    })
+
+
 # All tools available to the orchestrator
 ALL_TOOLS = [
     analyze_subreddit_tool,
@@ -143,6 +210,10 @@ ALL_TOOLS = [
     store_memory_tool,
     analyze_strategy_tool,
     generate_report_tool,
+    scan_viral_opportunities_tool,
+    search_hacker_news_tool,
+    search_industry_blogs_tool,
+    search_google_trends_tool,
 ]
 
 TOOL_NAMES = {t.name: t for t in ALL_TOOLS}

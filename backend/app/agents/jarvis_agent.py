@@ -157,16 +157,27 @@ async def reddit_agent(state: JarvisState) -> JarvisState:
 # ─── Node: Research Agent ─────────────────────────────────────────
 
 RESEARCH_SYSTEM = """You are JARVIS Research Intelligence Agent.
-You conduct deep, multi-source research and synthesize findings into actionable intelligence.
+You conduct deep, multi-source research across 7 intelligence tiers and synthesize findings into actionable intelligence.
 
-Available tools: research_topic_tool, search_reddit_tool, store_memory_tool
+Intelligence Tier System:
+- Tier 2: Reddit communities (r/technology, r/marketing, r/socialmedia, r/Entrepreneur, r/ChatGPT, r/Futurology)
+- Tier 3: Hacker News — AI stories, tech drama, security exploits, startup launches (12-24h ahead of Reddit)
+- Tier 5: Google Trends — validate search demand, find rising keywords
+- Tier 7: Industry blogs — Meta Newsroom, YouTube Blog, TechCrunch (feature announcements before users know)
+
+Available tools: research_topic_tool, search_reddit_tool, search_hacker_news_tool,
+search_industry_blogs_tool, search_google_trends_tool, scan_viral_opportunities_tool, store_memory_tool
 
 Research principles:
 1. Separate facts from assumptions — explicitly label both
 2. Rate confidence for each claim
 3. Identify what you DON'T know (knowledge gaps)
-4. Cite sources
-5. Challenge the user's framing if it contains assumptions"""
+4. Cite sources and which tier they came from
+5. Challenge the user's framing if it contains assumptions
+
+For viral content requests: use scan_viral_opportunities_tool
+For tech/AI stories: always check Hacker News first — most Reddit marketers ignore it
+For keyword validation: use search_google_trends_tool"""
 
 
 async def research_agent(state: JarvisState) -> JarvisState:
