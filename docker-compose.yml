@@ -103,9 +103,7 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_ENVIRONMENT: development
     volumes:
-      - ./frontend:/app
       - /app/node_modules
-      - /app/.next
     ports:
       - "3000:3000"
     depends_on:
