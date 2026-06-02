@@ -15,9 +15,8 @@ if [ ! -f .env ]; then
   cp .env.example .env
   echo ""
   echo "⚠️   STOP: open the file called  .env  and paste in your keys:"
-  echo "        • ANTHROPIC_API_KEY   (console.anthropic.com)"
-  echo "        • OPENAI_API_KEY      (platform.openai.com)"
-  echo "        • REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET (reddit.com/prefs/apps)"
+  echo "        • GEMINI_API_KEY   (aistudio.google.com — free, no card needed)"
+  echo "        • JWT_SECRET_KEY   (any long random string, 32+ chars)"
   echo ""
   echo "    Then run  ./start.sh  again."
   exit 0
