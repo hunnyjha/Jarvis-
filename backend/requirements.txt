@@ -17,7 +17,10 @@ email-validator==2.1.0.post1
 
 # ── Authentication ────────────────────────────────────────────
 python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+passlib==1.7.4
+# bcrypt 4.1+ removed __about__.__version__ which passlib 1.7.4 reads;
+# pin to 4.0.1 for compatibility.
+bcrypt==4.0.1
 
 # ── HTTP Client ──────────────────────────────────────────────
 httpx==0.26.0
