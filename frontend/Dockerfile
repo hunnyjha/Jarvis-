@@ -6,6 +6,15 @@ FROM base AS deps
 COPY package.json ./
 RUN npm install --frozen-lockfile 2>/dev/null || npm install
 
+FROM base AS development
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+CMD ["npm", "run", "dev"]
+
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
