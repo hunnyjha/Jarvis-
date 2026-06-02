@@ -55,8 +55,6 @@ class SecurityInvestigation(BaseModel):
 
     __tablename__ = "security_investigations"
     __table_args__ = (
-        Index("ix_security_investigations_user_id", "user_id"),
-        Index("ix_security_investigations_status", "status"),
         {"comment": "Security and OSINT investigations"},
     )
 
@@ -128,8 +126,6 @@ class SecurityFinding(BaseModel):
 
     __tablename__ = "security_findings"
     __table_args__ = (
-        Index("ix_security_findings_investigation_id", "investigation_id"),
-        Index("ix_security_findings_severity", "severity"),
         {"comment": "Individual findings within a security investigation"},
     )
 

@@ -37,11 +37,7 @@ class ResearchSession(BaseModel):
     """A research session initiated by a user."""
 
     __tablename__ = "research_sessions"
-    __table_args__ = (
-        Index("ix_research_sessions_user_id", "user_id"),
-        Index("ix_research_sessions_status", "status"),
-        {"comment": "User-initiated research sessions"},
-    )
+    __table_args__ = {"comment": "User-initiated research sessions"}
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -110,10 +106,7 @@ class ResearchResult(BaseModel):
     """Individual result from a research session."""
 
     __tablename__ = "research_results"
-    __table_args__ = (
-        Index("ix_research_results_session_id", "session_id"),
-        {"comment": "Individual research results within a session"},
-    )
+    __table_args__ = {"comment": "Individual research results within a session"}
 
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

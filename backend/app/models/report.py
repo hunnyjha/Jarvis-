@@ -44,12 +44,7 @@ class Report(BaseModel):
     """Generated report in a specified format."""
 
     __tablename__ = "reports"
-    __table_args__ = (
-        Index("ix_reports_user_id", "user_id"),
-        Index("ix_reports_report_type", "report_type"),
-        Index("ix_reports_status", "status"),
-        {"comment": "Generated analysis reports"},
-    )
+    __table_args__ = {"comment": "Generated analysis reports"}
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

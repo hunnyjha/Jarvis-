@@ -20,11 +20,10 @@ class AuditLog(BaseModel):
     """Immutable audit log entry for every user action."""
 
     __tablename__ = "audit_logs"
+    # NOTE: user_id, action and resource_type get their index from
+    # index=True on the columns below, and created_at from TimestampMixin.
+    # Do not redefine them here or create_all emits duplicate CREATE INDEX.
     __table_args__ = (
-        Index("ix_audit_logs_user_id", "user_id"),
-        Index("ix_audit_logs_action", "action"),
-        Index("ix_audit_logs_resource_type", "resource_type"),
-        Index("ix_audit_logs_created_at", "created_at"),
         {"comment": "Immutable audit log for all user actions"},
     )
 

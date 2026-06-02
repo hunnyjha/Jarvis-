@@ -34,10 +34,9 @@ class MemoryCollection(BaseModel):
     """Named collection grouping related memories."""
 
     __tablename__ = "memory_collections"
-    __table_args__ = (
-        Index("ix_memory_collections_user_id", "user_id"),
-        {"comment": "Named collections for organizing memories"},
-    )
+    # Column-level index=True already creates these indexes; no explicit
+    # Index() here to avoid duplicate CREATE INDEX during create_all.
+    __table_args__ = {"comment": "Named collections for organizing memories"}
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -65,13 +64,7 @@ class Memory(BaseModel):
     """A single memory entry with vector embedding in ChromaDB."""
 
     __tablename__ = "memories"
-    __table_args__ = (
-        Index("ix_memories_user_id", "user_id"),
-        Index("ix_memories_collection_id", "collection_id"),
-        Index("ix_memories_memory_type", "memory_type"),
-        Index("ix_memories_is_pinned", "is_pinned"),
-        {"comment": "Long-term semantic memory entries"},
-    )
+    __table_args__ = {"comment": "Long-term semantic memory entries"}
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True

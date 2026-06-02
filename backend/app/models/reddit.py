@@ -37,12 +37,7 @@ class SubredditAnalysis(BaseModel):
     """Analysis of a Reddit subreddit."""
 
     __tablename__ = "subreddit_analyses"
-    __table_args__ = (
-        Index("ix_subreddit_analyses_user_id", "user_id"),
-        Index("ix_subreddit_analyses_subreddit_name", "subreddit_name"),
-        Index("ix_subreddit_analyses_status", "status"),
-        {"comment": "Subreddit analysis results"},
-    )
+    __table_args__ = {"comment": "Subreddit analysis results"}
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -141,10 +136,7 @@ class TopicDiscovery(BaseModel):
     """Discovered topic within a subreddit analysis."""
 
     __tablename__ = "topic_discoveries"
-    __table_args__ = (
-        Index("ix_topic_discoveries_analysis_id", "analysis_id"),
-        {"comment": "Topics discovered within subreddit analyses"},
-    )
+    __table_args__ = {"comment": "Topics discovered within subreddit analyses"}
 
     analysis_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -173,11 +165,7 @@ class RedditPost(BaseModel):
     """Individual Reddit post stored during analysis."""
 
     __tablename__ = "reddit_posts"
-    __table_args__ = (
-        Index("ix_reddit_posts_analysis_id", "analysis_id"),
-        Index("ix_reddit_posts_reddit_id", "reddit_id"),
-        {"comment": "Reddit posts collected during analysis"},
-    )
+    __table_args__ = {"comment": "Reddit posts collected during analysis"}
 
     analysis_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
