@@ -65,7 +65,7 @@ class SecurityService:
             inv.risk_level = self._parse_severity(risk_level_str)
             inv.recommendations = ai_result.get("recommendations", {})
             inv.raw_data = collected
-            inv.metadata = {"behavioral_analysis": behavioral}
+            inv.extra_metadata = {"behavioral_analysis": behavioral}
 
             # Store findings
             for f_data in ai_result.get("findings", [])[:20]:

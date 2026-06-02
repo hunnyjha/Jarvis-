@@ -105,7 +105,7 @@ class SecurityInvestigation(BaseModel):
         nullable=True,
         comment="Raw collected data",
     )
-    metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships

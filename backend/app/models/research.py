@@ -80,7 +80,8 @@ class ResearchSession(BaseModel):
         default=0,
         nullable=False,
     )
-    metadata: Mapped[Optional[dict]] = mapped_column(
+    extra_metadata: Mapped[Optional[dict]] = mapped_column(
+        "metadata",
         JSONB,
         nullable=True,
         default=dict,

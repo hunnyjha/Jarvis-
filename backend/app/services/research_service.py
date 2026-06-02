@@ -53,7 +53,7 @@ class ResearchService:
 
             session.summary = ai_result.get("summary", "")
             session.sources_count = len(sources)
-            session.metadata = ai_result
+            session.extra_metadata = ai_result
             session.status = ResearchStatus.COMPLETED
             await self.db.commit()
             logger.info("research.session.completed", session_id=str(session_id))

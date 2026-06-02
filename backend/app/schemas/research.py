@@ -38,7 +38,7 @@ class ResearchSessionResponse(BaseModel):
     status: ResearchStatus
     summary: Optional[str]
     sources_count: int
-    metadata: Optional[Dict[str, Any]]
+    extra_metadata: Optional[Dict[str, Any]] = None
     error_message: Optional[str]
     created_at: datetime
     updated_at: datetime
