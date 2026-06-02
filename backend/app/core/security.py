@@ -40,24 +40,32 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(
-    subject: str | UUID,
+    subject: str | UUID | dict[str, Any],
     additional_claims: Optional[dict[str, Any]] = None,
     expires_delta: Optional[timedelta] = None,
 ) -> str:
-    """Create a JWT access token."""
+    """
+    Create a JWT access token.
+    `subject` can be a user ID string/UUID, or a dict with a 'sub' key.
+    """
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     now = datetime.now(timezone.utc)
     expire = now + expires_delta
 
-    payload: dict[str, Any] = {
-        "sub": str(subject),
-        "iat": now,
-        "exp": expire,
-        "type": ACCESS_TOKEN_TYPE,
-        "jti": str(UUID(int=int(now.timestamp() * 1000000))),
-    }
+    # Support both create_access_token(user_id) and create_access_token({"sub": user_id})
+    if isinstance(subject, dict):
+        payload: dict[str, Any] = {**subject, "iat": now, "exp": expire, "type": ACCESS_TOKEN_TYPE}
+        if "sub" not in payload:
+            raise ValueError("subject dict must contain 'sub' key")
+    else:
+        payload = {
+            "sub": str(subject),
+            "iat": now,
+            "exp": expire,
+            "type": ACCESS_TOKEN_TYPE,
+        }
 
     if additional_claims:
         payload.update(additional_claims)
@@ -66,22 +74,28 @@ def create_access_token(
 
 
 def create_refresh_token(
-    subject: str | UUID,
+    subject: str | UUID | dict[str, Any],
     expires_delta: Optional[timedelta] = None,
 ) -> str:
-    """Create a JWT refresh token."""
+    """
+    Create a JWT refresh token.
+    `subject` can be a user ID string/UUID, or a dict with a 'sub' key.
+    """
     if expires_delta is None:
         expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
     now = datetime.now(timezone.utc)
     expire = now + expires_delta
 
-    payload: dict[str, Any] = {
-        "sub": str(subject),
-        "iat": now,
-        "exp": expire,
-        "type": REFRESH_TOKEN_TYPE,
-    }
+    if isinstance(subject, dict):
+        payload: dict[str, Any] = {**subject, "iat": now, "exp": expire, "type": REFRESH_TOKEN_TYPE}
+    else:
+        payload = {
+            "sub": str(subject),
+            "iat": now,
+            "exp": expire,
+            "type": REFRESH_TOKEN_TYPE,
+        }
 
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
@@ -145,3 +159,38 @@ def create_token_pair(user_id: str | UUID) -> dict[str, str]:
         "refresh_token": create_refresh_token(user_id),
         "token_type": "bearer",
     }
+
+
+async def get_current_user(
+    token: Optional[str] = Depends(oauth2_scheme),
+) -> Any:
+    """
+    FastAPI dependency that returns the current authenticated User model.
+    Imports User lazily to avoid circular imports.
+    """
+    from sqlalchemy import select
+
+    from app.core.database import get_session_factory
+    from app.models.user import User
+
+    if not token:
+        raise UnauthorizedError("Authentication required")
+
+    payload = decode_token(token)
+    if payload.get("type") != ACCESS_TOKEN_TYPE:
+        raise UnauthorizedError("Invalid token type")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise UnauthorizedError("Invalid token payload")
+
+    session_factory = get_session_factory()
+    async with session_factory() as db:
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
+    if not user:
+        raise UnauthorizedError("User not found")
+    if not user.is_active:
+        raise UnauthorizedError("Account is disabled")
+    return user

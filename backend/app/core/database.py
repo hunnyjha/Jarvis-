@@ -119,3 +119,34 @@ async def close_db() -> None:
         _engine = None
         _session_factory = None
     logger.info("Database connections closed")
+
+
+# Compatibility alias used by background tasks in route files
+class _AsyncSessionLocal:
+    """
+    Async context manager that creates a new database session.
+    Used as `async with AsyncSessionLocal() as db:` in background tasks.
+    """
+
+    def __init__(self) -> None:
+        self._session: AsyncSession | None = None
+
+    async def __aenter__(self) -> AsyncSession:
+        factory = get_session_factory()
+        self._session = factory()
+        await self._session.__aenter__()
+        return self._session
+
+    async def __aexit__(self, exc_type: type, exc_val: Exception, exc_tb: object) -> None:
+        if self._session is not None:
+            if exc_type:
+                await self._session.rollback()
+            else:
+                await self._session.commit()
+            await self._session.__aexit__(exc_type, exc_val, exc_tb)
+            self._session = None
+
+
+def AsyncSessionLocal() -> _AsyncSessionLocal:
+    """Factory for async database session context managers."""
+    return _AsyncSessionLocal()

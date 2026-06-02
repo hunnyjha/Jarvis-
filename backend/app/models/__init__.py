@@ -1,31 +1,33 @@
-"""
-JARVIS Models — SQLAlchemy ORM models.
-Import all models here to ensure they are registered with the metadata.
-"""
-from app.models.base import BaseModel, TimestampMixin, UUIDMixin
-from app.models.user import User
-from app.models.research import ResearchSession, ResearchResult
-from app.models.reddit import SubredditAnalysis, TopicDiscovery, RedditPost
-from app.models.security import SecurityInvestigation, SecurityFinding
-from app.models.memory import Memory, MemoryCollection
-from app.models.report import Report, ReportType
 from app.models.audit import AuditLog
+from app.models.base import BaseModel, TimestampMixin, UUIDMixin
+from app.models.memory import Memory, MemoryCollection, MemoryType
+from app.models.reddit import (
+    AnalysisStatus,
+    RedditPost,
+    SentimentLabel,
+    SubredditAnalysis,
+    TopicDiscovery,
+)
+from app.models.report import Report, ReportFormat, ReportStatus, ReportType
+from app.models.research import ResearchResult, ResearchSession, ResearchStatus, ResearchType
+from app.models.security import (
+    FindingType,
+    InvestigationStatus,
+    InvestigationType,
+    SecurityFinding,
+    SecurityInvestigation,
+    SeverityLevel,
+)
+from app.models.user import User
 
 __all__ = [
-    "BaseModel",
-    "TimestampMixin",
-    "UUIDMixin",
+    "BaseModel", "TimestampMixin", "UUIDMixin",
     "User",
-    "ResearchSession",
-    "ResearchResult",
-    "SubredditAnalysis",
-    "TopicDiscovery",
-    "RedditPost",
-    "SecurityInvestigation",
-    "SecurityFinding",
-    "Memory",
-    "MemoryCollection",
-    "Report",
-    "ReportType",
+    "ResearchSession", "ResearchResult", "ResearchStatus", "ResearchType",
+    "SubredditAnalysis", "TopicDiscovery", "RedditPost", "AnalysisStatus", "SentimentLabel",
+    "SecurityInvestigation", "SecurityFinding", "InvestigationStatus", "InvestigationType",
+    "SeverityLevel", "FindingType",
+    "Memory", "MemoryCollection", "MemoryType",
+    "Report", "ReportType", "ReportFormat", "ReportStatus",
     "AuditLog",
 ]
