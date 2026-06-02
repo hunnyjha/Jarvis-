@@ -47,7 +47,6 @@ def setup_logging(log_level: str = "INFO", is_production: bool = False) -> None:
         structlog.contextvars.merge_contextvars,
         add_request_id,
         add_app_info,
-        structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
