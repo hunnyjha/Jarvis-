@@ -34,8 +34,11 @@ until docker compose exec -T backend python -c "print('ok')" >/dev/null 2>&1; do
 done
 
 # 4. Set up the database
+#    The app creates all tables on startup (create_all), so we only
+#    stamp Alembic's version table to keep migration history in sync —
+#    running the migrations again would clash with the existing tables.
 echo "🗄️   Setting up the database..."
-docker compose exec -T backend alembic upgrade head
+docker compose exec -T backend alembic stamp head 2>/dev/null || true
 docker compose exec -T backend python -m app.db.seed
 
 # 5. Done!
