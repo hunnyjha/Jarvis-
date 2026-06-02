@@ -26,14 +26,7 @@ from app.services.ai_service import AIService
 logger = structlog.get_logger(__name__)
 
 
-def _reddit():
-    import praw
-    return praw.Reddit(
-        client_id=settings.REDDIT_CLIENT_ID,
-        client_secret=settings.REDDIT_CLIENT_SECRET,
-        user_agent=settings.REDDIT_USER_AGENT,
-        ratelimit_seconds=settings.REDDIT_REQUEST_DELAY,
-    )
+_REDDIT_HEADERS = {"User-Agent": settings.REDDIT_USER_AGENT}
 
 
 class RedditService:
@@ -150,65 +143,47 @@ class RedditService:
             except Exception:
                 pass
 
-    # ─── PRAW Data Collection ─────────────────────────────────────
+    # ─── Public JSON Data Collection ──────────────────────────────
 
     def _fetch_subreddit_data(
         self, subreddit_name: str, time_period: str, limit: int
     ) -> Dict[str, Any]:
+        import httpx
         try:
-            reddit = _reddit()
-            sub = reddit.subreddit(subreddit_name)
-
-            # Fetch metadata
-            try:
+            with httpx.Client(headers=_REDDIT_HEADERS, timeout=30, follow_redirects=True) as client:
+                about = client.get(f"https://www.reddit.com/r/{subreddit_name}/about.json")
+                about_data = about.json().get("data", {})
                 meta = {
-                    "subscribers": sub.subscribers,
-                    "active_user_count": sub.active_user_count,
-                    "public_description": sub.public_description,
-                    "created_utc": sub.created_utc,
-                    "over18": sub.over18,
-                    "subreddit_type": sub.subreddit_type,
+                    "subscribers": about_data.get("subscribers"),
+                    "active_user_count": about_data.get("active_user_count"),
+                    "public_description": about_data.get("public_description"),
+                    "created_utc": about_data.get("created_utc"),
                 }
-            except Exception:
-                meta = {}
 
-            posts = []
-            seen_ids = set()
+                top = client.get(
+                    f"https://www.reddit.com/r/{subreddit_name}/top.json",
+                    params={"t": time_period, "limit": min(limit, 100)},
+                )
+                children = top.json().get("data", {}).get("children", [])
 
-            for submission in sub.top(time_filter=time_period, limit=limit):
-                if submission.id in seen_ids:
-                    continue
-                seen_ids.add(submission.id)
-
-                # Fetch top 3 comments
-                top_comments = []
-                try:
-                    submission.comments.replace_more(limit=0)
-                    for comment in list(submission.comments)[:3]:
-                        if hasattr(comment, "body"):
-                            top_comments.append({
-                                "author": str(comment.author) if comment.author else "[deleted]",
-                                "body": comment.body[:300],
-                                "score": comment.score,
-                            })
-                except Exception:
-                    pass
-
-                posts.append({
-                    "id": submission.id,
-                    "title": submission.title,
-                    "author": str(submission.author) if submission.author else None,
-                    "url": submission.url,
-                    "permalink": f"https://reddit.com{submission.permalink}",
-                    "selftext": (submission.selftext or "")[:3000],
-                    "score": submission.score,
-                    "upvote_ratio": submission.upvote_ratio,
-                    "num_comments": submission.num_comments,
-                    "is_self": submission.is_self,
-                    "link_flair_text": submission.link_flair_text,
-                    "created_utc": submission.created_utc,
-                    "top_comments": top_comments,
-                })
+                posts = []
+                for child in children:
+                    p = child.get("data", {})
+                    posts.append({
+                        "id": p.get("id", ""),
+                        "title": p.get("title", ""),
+                        "author": p.get("author"),
+                        "url": p.get("url"),
+                        "permalink": f"https://reddit.com{p.get('permalink', '')}",
+                        "selftext": (p.get("selftext") or "")[:3000],
+                        "score": p.get("score", 0),
+                        "upvote_ratio": p.get("upvote_ratio"),
+                        "num_comments": p.get("num_comments", 0),
+                        "is_self": p.get("is_self", False),
+                        "link_flair_text": p.get("link_flair_text"),
+                        "created_utc": p.get("created_utc"),
+                        "top_comments": [],
+                    })
 
             return {"meta": meta, "posts": posts}
 

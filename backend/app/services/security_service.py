@@ -118,71 +118,67 @@ class SecurityService:
     # ─── Data Collection ──────────────────────────────────────────
 
     def _collect_account_data(self, username: str) -> Dict[str, Any]:
-        """Collect all public Reddit data about an account."""
+        """Collect public Reddit data about an account via public JSON API."""
+        import httpx
+        headers = {"User-Agent": settings.REDDIT_USER_AGENT}
         try:
-            import praw
-            reddit = praw.Reddit(
-                client_id=settings.REDDIT_CLIENT_ID,
-                client_secret=settings.REDDIT_CLIENT_SECRET,
-                user_agent=settings.REDDIT_USER_AGENT,
-            )
-            redditor = reddit.redditor(username)
+            with httpx.Client(headers=headers, timeout=30, follow_redirects=True) as client:
+                about = client.get(f"https://www.reddit.com/user/{username}/about.json")
+                about_data = about.json().get("data", {})
+                account_info = {
+                    "username": username,
+                    "account_created_utc": about_data.get("created_utc"),
+                    "comment_karma": about_data.get("comment_karma", 0),
+                    "link_karma": about_data.get("link_karma", 0),
+                    "is_verified": about_data.get("verified", False),
+                    "has_premium": about_data.get("is_gold", False),
+                }
 
-            account_info = {
-                "username": username,
-                "account_created_utc": getattr(redditor, "created_utc", None),
-                "comment_karma": getattr(redditor, "comment_karma", 0),
-                "link_karma": getattr(redditor, "link_karma", 0),
-                "is_verified": getattr(redditor, "verified", False),
-                "has_premium": getattr(redditor, "is_gold", False),
-            }
+                posts_resp = client.get(f"https://www.reddit.com/user/{username}/submitted.json?limit=50")
+                posts_children = posts_resp.json().get("data", {}).get("children", [])
+                posts: List[Dict[str, Any]] = []
+                subreddits_posted: Dict[str, int] = {}
+                for child in posts_children:
+                    p = child.get("data", {})
+                    sr = p.get("subreddit", "unknown")
+                    subreddits_posted[sr] = subreddits_posted.get(sr, 0) + 1
+                    posts.append({
+                        "title": p.get("title", ""),
+                        "subreddit": sr,
+                        "score": p.get("score", 0),
+                        "created_utc": p.get("created_utc"),
+                        "url": f"https://reddit.com{p.get('permalink', '')}",
+                    })
 
-            # Collect posts
-            posts: List[Dict[str, Any]] = []
-            subreddits_posted: Dict[str, int] = {}
-            for sub in redditor.submissions.new(limit=50):
-                sr = sub.subreddit.display_name
-                subreddits_posted[sr] = subreddits_posted.get(sr, 0) + 1
-                posts.append({
-                    "title": sub.title,
-                    "subreddit": sr,
-                    "score": sub.score,
-                    "created_utc": sub.created_utc,
-                    "url": f"https://reddit.com{sub.permalink}",
-                })
+                comments_resp = client.get(f"https://www.reddit.com/user/{username}/comments.json?limit=100")
+                comments_children = comments_resp.json().get("data", {}).get("children", [])
+                comments: List[Dict[str, Any]] = []
+                subreddits_commented: Dict[str, int] = {}
+                for child in comments_children:
+                    c = child.get("data", {})
+                    sr = c.get("subreddit", "unknown")
+                    subreddits_commented[sr] = subreddits_commented.get(sr, 0) + 1
+                    comments.append({
+                        "body": (c.get("body") or "")[:300],
+                        "subreddit": sr,
+                        "score": c.get("score", 0),
+                        "created_utc": c.get("created_utc"),
+                    })
 
-            # Collect comments
-            comments: List[Dict[str, Any]] = []
-            subreddits_commented: Dict[str, int] = {}
-            for c in redditor.comments.new(limit=100):
-                sr = c.subreddit.display_name
-                subreddits_commented[sr] = subreddits_commented.get(sr, 0) + 1
-                comments.append({
-                    "body": c.body[:300],
-                    "subreddit": sr,
-                    "score": c.score,
-                    "created_utc": c.created_utc,
-                })
-
-            # Activity timeline
-            all_timestamps = (
-                [p["created_utc"] for p in posts] +
-                [c["created_utc"] for c in comments]
-            )
-            all_timestamps.sort()
-
-            return {
-                **account_info,
-                "posts_sample": posts[:25],
-                "comments_sample": comments[:50],
-                "subreddits_posted": subreddits_posted,
-                "subreddits_commented": subreddits_commented,
-                "total_subreddits_active": len(
-                    set(subreddits_posted) | set(subreddits_commented)
-                ),
-                "activity_timestamps": all_timestamps[:100],
-                "collection_timestamp": datetime.now(timezone.utc).isoformat(),
-            }
+                all_timestamps = sorted(
+                    [p["created_utc"] for p in posts if p.get("created_utc")] +
+                    [c["created_utc"] for c in comments if c.get("created_utc")]
+                )
+                return {
+                    **account_info,
+                    "posts_sample": posts[:25],
+                    "comments_sample": comments[:50],
+                    "subreddits_posted": subreddits_posted,
+                    "subreddits_commented": subreddits_commented,
+                    "total_subreddits_active": len(set(subreddits_posted) | set(subreddits_commented)),
+                    "activity_timestamps": all_timestamps[:100],
+                    "collection_timestamp": datetime.now(timezone.utc).isoformat(),
+                }
 
         except Exception as exc:
             logger.warning("security.collection_failed", username=username, error=str(exc))

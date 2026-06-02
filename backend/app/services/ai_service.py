@@ -1,38 +1,40 @@
-"""AI Service — wraps Anthropic Claude for all intelligence tasks."""
+"""AI Service — wraps Google Gemini for all intelligence tasks."""
 from __future__ import annotations
 
 import json
 from typing import Any, Dict, List, Optional
 
+import google.generativeai as genai
 import structlog
-from anthropic import AsyncAnthropic
 
 from app.core.config import settings
 
 logger = structlog.get_logger(__name__)
 
+genai.configure(api_key=settings.GEMINI_API_KEY)
+
 
 class AIService:
     def __init__(self) -> None:
-        self.client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-        self.model = settings.ANTHROPIC_MODEL
+        self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
 
     async def _complete(self, system: str, user: str, max_tokens: int = 4096) -> str:
         """Base completion call."""
-        response = await self.client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
+        prompt = f"{system}\n\n{user}"
+        response = await self.model.generate_content_async(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                max_output_tokens=max_tokens,
+                temperature=settings.AI_TEMPERATURE,
+            ),
         )
-        return response.content[0].text
+        return response.text
 
     async def _complete_json(self, system: str, user: str, max_tokens: int = 4096) -> Dict[str, Any]:
         """Completion that parses JSON response."""
         system_with_json = system + "\n\nYou MUST respond with valid JSON only. No explanations outside the JSON."
         raw = await self._complete(system_with_json, user, max_tokens)
         try:
-            # Strip markdown code fences if present
             clean = raw.strip()
             if clean.startswith("```"):
                 clean = clean.split("\n", 1)[1].rsplit("```", 1)[0]
@@ -68,8 +70,8 @@ Return JSON with this exact structure:
     "growth_opportunities": ["opp1", "opp2"],
     "timing_insights": "when to post"
   }},
-  "top_topics": {{"topic": frequency_count}},
-  "trending_keywords": {{"keyword": relevance_score}},
+  "top_topics": {{"topic": 1}},
+  "trending_keywords": {{"keyword": 0.8}},
   "sentiment_scores": {{
     "positive": 0.0,
     "neutral": 0.0,

@@ -65,31 +65,26 @@ class ResearchService:
             await self.db.commit()
 
     async def _search_reddit(self, query: str) -> List[Dict[str, Any]]:
-        """Search Reddit via PRAW for research sources."""
-        import asyncio
-        import praw
-
-        def _sync_search():
-            reddit = praw.Reddit(
-                client_id=settings.REDDIT_CLIENT_ID,
-                client_secret=settings.REDDIT_CLIENT_SECRET,
-                user_agent=settings.REDDIT_USER_AGENT,
-            )
-            results = []
-            for sub in reddit.subreddit("all").search(query, limit=10, sort="relevance"):
-                results.append({
-                    "title": sub.title,
-                    "url": f"https://reddit.com{sub.permalink}",
-                    "source": f"r/{sub.subreddit.display_name}",
-                    "content": sub.selftext[:2000] if sub.selftext else "",
-                    "snippet": (sub.selftext[:200] + "...") if sub.selftext else sub.title,
-                    "relevance_score": min(1.0, sub.score / 1000),
-                })
-            return results
-
+        """Search Reddit via public JSON API."""
+        import urllib.parse
+        headers = {"User-Agent": settings.REDDIT_USER_AGENT}
+        url = f"https://www.reddit.com/search.json?q={urllib.parse.quote(query)}&sort=relevance&limit=10"
         try:
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, _sync_search)
+            async with httpx.AsyncClient(headers=headers, timeout=30, follow_redirects=True) as client:
+                resp = await client.get(url)
+                children = resp.json().get("data", {}).get("children", [])
+                results = []
+                for child in children:
+                    p = child.get("data", {})
+                    results.append({
+                        "title": p.get("title", ""),
+                        "url": f"https://reddit.com{p.get('permalink', '')}",
+                        "source": f"r/{p.get('subreddit', 'unknown')}",
+                        "content": (p.get("selftext") or "")[:2000],
+                        "snippet": (p.get("selftext") or p.get("title", ""))[:200],
+                        "relevance_score": min(1.0, (p.get("score") or 0) / 1000),
+                    })
+                return results
         except Exception as exc:
             logger.warning("research.reddit_search_failed", error=str(exc))
             return []

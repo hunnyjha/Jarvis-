@@ -63,10 +63,8 @@ class Settings(BaseSettings):
     CHROMA_COLLECTION_NAME: str = Field(default="jarvis_memories")
 
     # ── AI APIs ──────────────────────────────────────────────────
-    ANTHROPIC_API_KEY: str = Field(default="")
-    OPENAI_API_KEY: str = Field(default="")
-    ANTHROPIC_MODEL: str = Field(default="claude-3-5-sonnet-20241022")
-    OPENAI_MODEL: str = Field(default="gpt-4-turbo-preview")
+    GEMINI_API_KEY: str = Field(default="")
+    GEMINI_MODEL: str = Field(default="gemini-1.5-flash")
     AI_MAX_TOKENS: int = Field(default=4096)
     AI_TEMPERATURE: float = Field(default=0.7)
 
@@ -76,13 +74,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7)
 
-    # ── Reddit API ────────────────────────────────────────────────
-    REDDIT_CLIENT_ID: str = Field(default="")
-    REDDIT_CLIENT_SECRET: str = Field(default="")
-    REDDIT_USER_AGENT: str = Field(default="JARVIS:v1.0.0 (by /u/jarvis_bot)")
-    REDDIT_USERNAME: Optional[str] = Field(default=None)
-    REDDIT_PASSWORD: Optional[str] = Field(default=None)
-    REDDIT_REQUEST_DELAY: float = Field(default=1.0, description="Delay between Reddit API requests")
+    # ── Reddit Public API ─────────────────────────────────────────
+    REDDIT_USER_AGENT: str = Field(default="JARVIS:v1.0 (personal assistant)")
 
     # ── URLs ─────────────────────────────────────────────────────
     BACKEND_URL: str = Field(default="http://localhost:8000")

@@ -17,7 +17,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 import structlog
-from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -31,16 +31,16 @@ logger = structlog.get_logger(__name__)
 MAX_ITERATIONS = 5
 
 
-def _llm(temperature: float = 0.3) -> ChatAnthropic:
-    return ChatAnthropic(
-        model=settings.ANTHROPIC_MODEL,
-        api_key=settings.ANTHROPIC_API_KEY,
+def _llm(temperature: float = 0.3) -> ChatGoogleGenerativeAI:
+    return ChatGoogleGenerativeAI(
+        model=settings.GEMINI_MODEL,
+        google_api_key=settings.GEMINI_API_KEY,
         temperature=temperature,
-        max_tokens=settings.AI_MAX_TOKENS,
+        max_output_tokens=settings.AI_MAX_TOKENS,
     )
 
 
-def _llm_with_tools() -> ChatAnthropic:
+def _llm_with_tools() -> ChatGoogleGenerativeAI:
     return _llm().bind_tools(ALL_TOOLS)
 
 

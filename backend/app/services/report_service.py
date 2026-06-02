@@ -54,7 +54,7 @@ class ReportService:
                     file_path=file_path,
                     file_size_bytes=file_size,
                     executive_summary=ai_content.get("executive_summary"),
-                    extra_metadata={"ai_model": settings.ANTHROPIC_MODEL},
+                    extra_metadata={"ai_model": settings.GEMINI_MODEL},
                 )
             )
             await self.db.commit()
@@ -112,21 +112,17 @@ class ReportService:
     async def _generate_ai_narrative(
         self, title: str, content: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Use Claude to write the report narrative."""
-        import anthropic
+        """Use Gemini to write the report narrative."""
         import json
+        import google.generativeai as genai
 
-        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        model = genai.GenerativeModel(settings.GEMINI_MODEL)
         content_summary = json.dumps(content, indent=2)[:3000]
 
         try:
-            response = await client.messages.create(
-                model=settings.ANTHROPIC_MODEL,
-                max_tokens=2000,
-                messages=[{
-                    "role": "user",
-                    "content": f"""Write a professional intelligence report for: "{title}"
+            response = await model.generate_content_async(
+                f"""Write a professional intelligence report for: "{title}"
 
 Data:
 {content_summary}
@@ -138,10 +134,9 @@ Return JSON with:
     "analysis": "detailed analysis section (3-4 paragraphs)",
     "conclusions": "conclusions section",
     "recommendations": ["recommendation1", "recommendation2"]
-}}""",
-                }],
+}}"""
             )
-            text = response.content[0].text
+            text = response.text
             start = text.find("{")
             end = text.rfind("}") + 1
             return json.loads(text[start:end]) if start >= 0 else {"executive_summary": text[:500]}
