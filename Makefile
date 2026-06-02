@@ -131,5 +131,5 @@ lint: ## Lint code (backend + frontend)
 setup: ## Initial project setup (first time)
 	@bash scripts/setup.sh
 
-seed: ## Seed database with sample data
-	$(DOCKER_COMPOSE) exec $(BACKEND_SERVICE) python -m app.scripts.seed_db
+seed: ## Seed database with the admin user + default collections
+	$(DOCKER_COMPOSE) exec $(BACKEND_SERVICE) python -m app.db.seed
