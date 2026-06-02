@@ -11,8 +11,8 @@ asyncpg==0.29.0
 psycopg2-binary==2.9.9
 
 # ── Validation & Settings ─────────────────────────────────────
-pydantic==2.6.1
-pydantic-settings==2.1.0
+pydantic==2.10.6
+pydantic-settings==2.7.0
 email-validator==2.1.0.post1
 
 # ── Authentication ────────────────────────────────────────────
