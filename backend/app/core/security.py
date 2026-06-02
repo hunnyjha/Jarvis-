@@ -1,196 +1,187 @@
 """
-JARVIS Security — JWT token handling, password hashing, OAuth2 scheme.
+JARVIS Security — JWT tokens, password hashing, auth dependencies.
 """
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
-from uuid import UUID
 
+import structlog
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.database import get_db
 from app.core.exceptions import UnauthorizedError
 
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+logger = structlog.get_logger(__name__)
 
-# OAuth2 bearer token scheme
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.API_V1_STR}/auth/login",
-    auto_error=False,
-)
-
-# Token types
 ACCESS_TOKEN_TYPE = "access"
 REFRESH_TOKEN_TYPE = "refresh"
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+bearer_scheme = HTTPBearer(auto_error=False)
+
+# Redis key prefix for token blacklist
+_BLACKLIST_PREFIX = "jarvis:token:blacklist:"
+
 
 def hash_password(password: str) -> str:
-    """Hash a plaintext password using bcrypt."""
     return pwd_context.hash(password)
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plaintext password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
+
+
+def _build_payload(
+    sub: str,
+    token_type: str,
+    expires_delta: timedelta,
+    extra: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    payload: dict[str, Any] = {
+        "sub": sub,
+        "type": token_type,
+        "iat": now,
+        "exp": now + expires_delta,
+        "jti": str(uuid.uuid4()),
+    }
+    if extra:
+        payload.update(extra)
+    return payload
 
 
 def create_access_token(
-    subject: str | UUID | dict[str, Any],
+    subject: str | uuid.UUID | dict[str, Any],
     additional_claims: Optional[dict[str, Any]] = None,
     expires_delta: Optional[timedelta] = None,
 ) -> str:
-    """
-    Create a JWT access token.
-    `subject` can be a user ID string/UUID, or a dict with a 'sub' key.
-    """
-    if expires_delta is None:
-        expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    """Create a signed JWT access token."""
+    delta = expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    now = datetime.now(timezone.utc)
-    expire = now + expires_delta
-
-    # Support both create_access_token(user_id) and create_access_token({"sub": user_id})
     if isinstance(subject, dict):
-        payload: dict[str, Any] = {**subject, "iat": now, "exp": expire, "type": ACCESS_TOKEN_TYPE}
-        if "sub" not in payload:
-            raise ValueError("subject dict must contain 'sub' key")
+        sub = str(subject.get("sub", ""))
+        extra = {k: v for k, v in subject.items() if k != "sub"}
+        if additional_claims:
+            extra.update(additional_claims)
     else:
-        payload = {
-            "sub": str(subject),
-            "iat": now,
-            "exp": expire,
-            "type": ACCESS_TOKEN_TYPE,
-        }
+        sub = str(subject)
+        extra = additional_claims or {}
 
-    if additional_claims:
-        payload.update(additional_claims)
-
+    payload = _build_payload(sub, ACCESS_TOKEN_TYPE, delta, extra)
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
 def create_refresh_token(
-    subject: str | UUID | dict[str, Any],
+    subject: str | uuid.UUID | dict[str, Any],
     expires_delta: Optional[timedelta] = None,
 ) -> str:
-    """
-    Create a JWT refresh token.
-    `subject` can be a user ID string/UUID, or a dict with a 'sub' key.
-    """
-    if expires_delta is None:
-        expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-
-    now = datetime.now(timezone.utc)
-    expire = now + expires_delta
+    """Create a signed JWT refresh token."""
+    delta = expires_delta or timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
     if isinstance(subject, dict):
-        payload: dict[str, Any] = {**subject, "iat": now, "exp": expire, "type": REFRESH_TOKEN_TYPE}
+        sub = str(subject.get("sub", ""))
     else:
-        payload = {
-            "sub": str(subject),
-            "iat": now,
-            "exp": expire,
-            "type": REFRESH_TOKEN_TYPE,
-        }
+        sub = str(subject)
 
+    payload = _build_payload(sub, REFRESH_TOKEN_TYPE, delta)
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
 def decode_token(token: str) -> dict[str, Any]:
-    """
-    Decode and validate a JWT token.
-    Raises UnauthorizedError if token is invalid or expired.
-    """
+    """Decode and validate a JWT. Raises JWTError on failure."""
+    return jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+
+
+async def blacklist_token(jti: str, exp: int) -> None:
+    """Add a token JTI to the Redis blacklist until its natural expiry."""
     try:
-        payload = jwt.decode(
-            token,
-            settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM],
-        )
-        return payload
-    except JWTError as e:
-        raise UnauthorizedError(f"Invalid token: {str(e)}")
+        from app.core.redis import get_redis
+        redis = await get_redis()
+        ttl = max(0, exp - int(datetime.now(timezone.utc).timestamp()))
+        if ttl > 0:
+            await redis.setex(f"{_BLACKLIST_PREFIX}{jti}", ttl, "1")
+    except Exception as exc:
+        logger.warning("token.blacklist_failed", jti=jti, error=str(exc))
 
 
-def get_token_subject(token: str) -> str:
-    """Extract and return the subject (user ID) from a token."""
-    payload = decode_token(token)
-    sub = payload.get("sub")
-    if not sub:
-        raise UnauthorizedError("Token missing subject claim")
-    return sub
-
-
-def get_token_type(token: str) -> str:
-    """Get the type of a token (access or refresh)."""
-    payload = decode_token(token)
-    return payload.get("type", "")
-
-
-async def get_current_user_id(
-    token: Optional[str] = Depends(oauth2_scheme),
-) -> str:
-    """
-    FastAPI dependency that extracts and validates the current user ID from JWT.
-    """
-    if not token:
-        raise UnauthorizedError("Authentication required")
-
-    payload = decode_token(token)
-
-    if payload.get("type") != ACCESS_TOKEN_TYPE:
-        raise UnauthorizedError("Invalid token type")
-
-    user_id = payload.get("sub")
-    if not user_id:
-        raise UnauthorizedError("Invalid token payload")
-
-    return user_id
-
-
-def create_token_pair(user_id: str | UUID) -> dict[str, str]:
-    """Create both access and refresh tokens for a user."""
-    return {
-        "access_token": create_access_token(user_id),
-        "refresh_token": create_refresh_token(user_id),
-        "token_type": "bearer",
-    }
+async def is_token_blacklisted(jti: str) -> bool:
+    """Check whether a token JTI has been blacklisted."""
+    try:
+        from app.core.redis import get_redis
+        redis = await get_redis()
+        return await redis.exists(f"{_BLACKLIST_PREFIX}{jti}") == 1
+    except Exception:
+        return False
 
 
 async def get_current_user(
-    token: Optional[str] = Depends(oauth2_scheme),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
 ) -> Any:
-    """
-    FastAPI dependency that returns the current authenticated User model.
-    Imports User lazily to avoid circular imports.
-    """
-    from sqlalchemy import select
-
-    from app.core.database import get_session_factory
+    """FastAPI dependency — validates Bearer token and returns the active User."""
     from app.models.user import User
 
-    if not token:
-        raise UnauthorizedError("Authentication required")
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    payload = decode_token(token)
+    token = credentials.credentials
+    try:
+        payload = decode_token(token)
+    except JWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
     if payload.get("type") != ACCESS_TOKEN_TYPE:
-        raise UnauthorizedError("Invalid token type")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+        )
+
+    # Check blacklist
+    jti = payload.get("jti", "")
+    if jti and await is_token_blacklisted(jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+        )
 
     user_id = payload.get("sub")
     if not user_id:
-        raise UnauthorizedError("Invalid token payload")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
-    session_factory = get_session_factory()
-    async with session_factory() as db:
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user ID")
+
+    result = await db.execute(select(User).where(User.id == uid))
+    user = result.scalar_one_or_none()
 
     if not user:
-        raise UnauthorizedError("User not found")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if not user.is_active:
-        raise UnauthorizedError("Account is disabled")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+
     return user
+
+
+async def get_current_superuser(current_user: Any = Depends(get_current_user)) -> Any:
+    """Dependency that requires superuser privilege."""
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Superuser access required")
+    return current_user

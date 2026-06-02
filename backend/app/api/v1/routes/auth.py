@@ -1,18 +1,17 @@
 """Authentication routes — register, login, refresh, logout, profile."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.exceptions import UnauthorizedError
 from app.core.security import (
+    blacklist_token,
     create_access_token,
     create_refresh_token,
     decode_token,
@@ -31,7 +30,6 @@ router = APIRouter()
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> User:
     """Create a new user account."""
-    # Check uniqueness
     existing = await db.execute(
         select(User).where((User.email == payload.email) | (User.username == payload.username))
     )
@@ -40,7 +38,6 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
             status_code=status.HTTP_409_CONFLICT,
             detail="Email or username already registered",
         )
-
     user = User(
         email=payload.email,
         username=payload.username,
@@ -50,13 +47,17 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    logger.info("user.registered", user_id=str(user.id), email=user.email)
+    logger.info("user.registered", user_id=str(user.id))
     return user
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict:
-    """Authenticate and return JWT tokens."""
+async def login(
+    payload: LoginRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Authenticate and return access + refresh JWT tokens."""
     result = await db.execute(select(User).where(User.email == payload.email))
     user: User | None = result.scalar_one_or_none()
 
@@ -66,52 +67,85 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> di
             detail="Invalid email or password",
         )
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is disabled",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
 
-    # Update last login
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(timezone.utc)
     await db.commit()
 
-    access_token = create_access_token({"sub": str(user.id)})
-    refresh_token = create_refresh_token({"sub": str(user.id)})
+    access_token = create_access_token(str(user.id))
+    refresh_token = create_refresh_token(str(user.id))
 
-    logger.info("user.login", user_id=str(user.id))
+    logger.info("user.login", user_id=str(user.id), ip=request.client.host if request.client else None)
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "expires_in": 1800,  # 30 min
+        "expires_in": 1800,
     }
 
 
-@router.post("/refresh", response_model=AccessTokenResponse)
-async def refresh_token(payload: RefreshRequest, db: AsyncSession = Depends(get_db)) -> dict:
-    """Exchange a refresh token for a new access token."""
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_tokens(
+    payload: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Rotate tokens — invalidates the old refresh token and issues new pair."""
+    from jose import JWTError
+
     try:
         token_data = decode_token(payload.refresh_token)
-        if token_data.get("type") != "refresh":
-            raise UnauthorizedError("Invalid token type")
-    except Exception:
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
         )
 
-    result = await db.execute(select(User).where(User.id == token_data["sub"]))
+    if token_data.get("type") != "refresh":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong token type")
+
+    # Blacklist the used refresh token (rotation)
+    jti = token_data.get("jti", "")
+    exp = token_data.get("exp", 0)
+    if jti:
+        await blacklist_token(jti, exp)
+
+    user_id = token_data.get("sub")
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
-    access_token = create_access_token({"sub": str(user.id)})
-    return {"access_token": access_token, "token_type": "bearer", "expires_in": 1800}
+    access_token = create_access_token(str(user.id))
+    new_refresh = create_refresh_token(str(user.id))
+    return {
+        "access_token": access_token,
+        "refresh_token": new_refresh,
+        "token_type": "bearer",
+        "expires_in": 1800,
+    }
+
+
+@router.post("/logout")
+async def logout(
+    payload: RefreshRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Revoke both tokens. Client must discard them."""
+    try:
+        token_data = decode_token(payload.refresh_token)
+        jti = token_data.get("jti", "")
+        exp = token_data.get("exp", 0)
+        if jti:
+            await blacklist_token(jti, exp)
+    except Exception:
+        pass  # Best-effort blacklisting
+    logger.info("user.logout", user_id=str(current_user.id))
+    return {"message": "Logged out successfully"}
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)) -> User:
-    """Return the authenticated user's profile."""
     return current_user
 
 
@@ -121,16 +155,8 @@ async def update_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Update the authenticated user's profile."""
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(current_user, field, value)
     await db.commit()
     await db.refresh(current_user)
     return current_user
-
-
-@router.post("/logout")
-async def logout(current_user: User = Depends(get_current_user)) -> dict:
-    """Logout — client should discard tokens."""
-    logger.info("user.logout", user_id=str(current_user.id))
-    return {"message": "Logged out successfully"}
