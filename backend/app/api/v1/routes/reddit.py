@@ -103,7 +103,7 @@ async def get_analysis(
     return analysis
 
 
-@router.delete("/analyses/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/analyses/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_analysis(
     analysis_id: uuid.UUID,
     current_user: User = Depends(get_current_user),

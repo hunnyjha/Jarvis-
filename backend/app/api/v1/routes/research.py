@@ -97,7 +97,7 @@ async def get_session(
     return session
 
 
-@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_session(
     session_id: uuid.UUID,
     current_user: User = Depends(get_current_user),

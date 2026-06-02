@@ -99,7 +99,7 @@ async def get_investigation(
     return inv
 
 
-@router.delete("/investigations/{inv_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/investigations/{inv_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_investigation(
     inv_id: uuid.UUID,
     current_user: User = Depends(get_current_user),

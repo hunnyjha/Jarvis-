@@ -131,7 +131,7 @@ async def download_report(
     return FileResponse(path=report.file_path, media_type=media_type, filename=filename)
 
 
-@router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_report(
     report_id: uuid.UUID,
     current_user: User = Depends(get_current_user),

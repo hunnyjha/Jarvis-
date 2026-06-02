@@ -79,7 +79,7 @@ async def list_memories(
     return PaginatedResponse.create(items=list(items), total=total or 0, page=page, page_size=page_size)
 
 
-@router.delete("/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{memory_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_memory(
     memory_id: uuid.UUID,
     current_user: User = Depends(get_current_user),

@@ -31,16 +31,15 @@ hiredis==2.3.2
 chromadb==0.4.22
 
 # ── AI / LLM ─────────────────────────────────────────────────
-anthropic==0.18.1
+anthropic==0.105.2
 openai==1.12.0
 
 # ── Agent Framework ───────────────────────────────────────────
-langgraph==0.0.26
-langchain==0.1.9
-langchain-anthropic==0.1.1
-langchain-openai==0.0.8
-langchain-community==0.0.24
-langchain-core==0.1.27
+# Only langgraph, langchain-core and langchain-anthropic are imported by the app.
+langgraph==0.2.76
+langchain-core==0.3.86
+langchain-anthropic==0.3.22
+langsmith==0.8.8
 
 # ── Reddit ───────────────────────────────────────────────────
 praw==7.7.1
